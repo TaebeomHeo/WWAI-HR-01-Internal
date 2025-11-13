@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git remote add:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nInitial repository setup with project requirements and documentation\n\nAdd project requirements in Korean for HR system with three domains:\n- Personnel management (인사)\n- Payroll (급여)\n- General affairs (총무)\n\nInclude CLAUDE.md for future AI assistance and .gitignore for development files.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
