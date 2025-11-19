@@ -33,9 +33,64 @@ HR team members with:
 │   └── 04-Real-Cases/      # Real-world examples from HR workflows
 ├── Requirements/            # Original business requirements (in Korean)
 ├── SQL-Templates/           # Reusable SQL query templates
+│   ├── 인사/               # Personnel queries (발령, 인원현황, 재직자)
+│   ├── 급여/               # Payroll queries (PL리스트, 인건비)
+│   └── 총무/               # General affairs (자산관리, 재고)
 ├── Database/                # Database schema documentation
 └── Exercises/               # Practice problems
 ```
+
+## SQL Templates 사용법
+
+SQL-Templates 폴더에는 실무에서 바로 사용할 수 있는 쿼리 템플릿이 있습니다.
+
+### 사용 방법
+
+1. DBeaver에서 원하는 SQL 파일을 엽니다
+2. 파일 상단의 **변수 설정 부분**을 찾습니다 (▼▼▼ 표시)
+3. 날짜나 조건 값을 원하는 값으로 수정합니다
+4. 전체 쿼리를 실행합니다
+
+### 예시
+
+```sql
+-- ▼▼▼ 조회 기간 설정 (여기만 수정하세요) ▼▼▼
+SET @시작일 = '2025-11-10';  -- 조회 시작일
+SET @종료일 = '2025-11-16';  -- 조회 종료일
+-- ▲▲▲ 조회 기간 설정 ▲▲▲
+
+SELECT ...
+WHERE assignment_date >= @시작일
+  AND assignment_date <= @종료일
+```
+
+### 템플릿 목록
+
+**인사**
+- `01-주간-발령내역-조회.sql` - 주간 발령 내역
+- `02-프로젝트-철수-현황.sql` - 프로젝트 종료/철수 현황
+- `03-본부별-팀별-인원현황.sql` - 본부/팀별 인원
+- `04-재직자-명단.sql` - 전체 재직자 명단
+
+**급여**
+- `01-월별-PL-리스트.sql` - 월별 PL 목록
+- `02-본부별-팀별-인원현황.sql` - 인건비 현황용 인원
+
+**총무**
+- `01-자산-반출반입-현황.sql` - 자산 반출/반입
+- `02-부서별-팀별-자산현황.sql` - 부서별 자산
+- `03-재고-현황-및-예측.sql` - 재고 및 구매 예측
+
+## Database 연결 정보
+
+DBeaver 연결 설정:
+- **Host**: 61.37.80.105
+- **Port**: 3306
+- **Database**: dbwisewiresdb
+- **User**: wisewires
+- **Driver**: MariaDB
+
+> 비밀번호는 팀 내부 공유 문서를 참조하세요.
 
 ## Learning Path
 
