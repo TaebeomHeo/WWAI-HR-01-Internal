@@ -32,11 +32,13 @@ HR team members with:
 │   ├── 03-AI-Usage/        # How to work with AI for SQL queries
 │   └── 04-Real-Cases/      # Real-world examples from HR workflows
 ├── Requirements/            # Original business requirements (in Korean)
-├── SQL-Templates/           # Reusable SQL query templates
-│   ├── 인사/               # Personnel queries (발령, 인원현황, 재직자)
-│   ├── 급여/               # Payroll queries (PL리스트, 인건비)
-│   └── 총무/               # General affairs (자산관리, 재고)
-├── Database/                # Database schema documentation
+├── DB/                      # Database related resources
+│   ├── src/                # Utility Python scripts
+│   ├── schema/             # Database schema documentation
+│   └── SQL-Templates/      # Reusable SQL query templates
+│       ├── 인사/            # Personnel queries
+│       ├── 급여/            # Payroll queries
+│       └── 총무/            # General affairs
 └── Exercises/               # Practice problems
 ```
 
