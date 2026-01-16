@@ -19,16 +19,18 @@ This document serves as a standard operating procedure (SOP) for the AI Agent to
 2.  Enter ID and PW.
 3.  Verify successful login.
 
-### Step 2: Talent Search Protocol
-**User Input Format**:
-*   `일치 검색 : [Keyword]` -> Action: Enter in Left Search Bar + Toggle **"Exact Match" ON**.
-*   `검색 : [Keyword]` -> Action: Enter in **"AND"** Search Bar.
-*   **Logic**: All inputs (single or multiple) must be combined as **AND** conditions.
+### Step 2: Talent Search Protocol (Combined AND)
+**Rule 1**: Group all AND keywords in the "AND" field before searching.
+**Rule 2** (Autonomous): **Do NOT ask for confirmation.** Execute the search immediately after inputting keywords.
 
-**Current Execution**:
-1.  **Exact Match**: "QA" (Entered)
-2.  **AND Search**: "개발" (Entered)
-3.  **Execute**: Click **Search** button.
+1.  **Base Search (Result Set 1)**:
+    *   Input **"SQA"** (Exact Match) -> Click **Search**.
+2.  **Refine Search (AND Conditions)**:
+    *   Locate **"AND 키워드를 모두 포함"** field.
+    *   Input **"금융"** (Enter/Chip).
+    *   Input **"개발"** (Enter/Chip).
+    *   **Click SEARCH** (Execution).
+3.  **Filters**: Apply filters (Experience 5yr+) after keywords.
 
 ### Step 3: Extraction
 1.  Extract **Top 10 Candidates**.

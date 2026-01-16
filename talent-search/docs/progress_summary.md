@@ -60,3 +60,7 @@
     *   **Search Protocol**: Exact Match "QA" AND "개발" (Development).
     *   **Filter**: Experience 5 years+.
     *   **Output**: Extracted Top 10 candidates to `candidate_list_2026-01-16_saramin.csv`.
+*   **Execution (2026-01-16) - Updated Protocol**:
+    *   **Search**: "SQA" (Exact) + "금융" (Finance) + "개발" (Dev) combined in AND field.
+    *   **Results**: Found candidates with Finance/Banking background (e.g., Credit Suisse, Hyosung FMS).
+    *   **File**: `candidate_list_2026-01-16_saramin_sqa_fin_dev.csv`.
