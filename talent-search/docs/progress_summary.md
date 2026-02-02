@@ -64,3 +64,21 @@
     *   **Search**: "SQA" (Exact) + "금융" (Finance) + "개발" (Dev) combined in AND field.
     *   **Results**: Found candidates with Finance/Banking background (e.g., Credit Suisse, Hyosung FMS).
     *   **File**: `candidate_list_2026-01-16_saramin_sqa_fin_dev.csv`.
+
+## [To-Do Next Session] Saramin Search Automation Resumption (2024-02-02 Saved)
+
+**Start Prompt**:
+"Resume work on Saramin Talent Search Automation.
+Context:
+1. **Completed**: Login logic verified (), Search Page Navigation, OR Input Selector (), Exact Match Toggle ().
+2. **Current Blocker**: Hangul Keyword Input ('개발') fails in browser automation (timeout/encoding issue).
+3. **Target Files**:
+   - Instruction: `talent-search/docs/instruction_saramin.md` (Partially verified)
+   - History: `talent-search/docs/history/walkthrough_20240202_transfer.md`
+
+**Immediate Action Items**:
+1. **Debug Hangul Input**: Try alternative input methods (Clipboard API, complex JS events) to successfully search for '개발'.
+2. **Verify Search Logic**: Once input works, verify 'AND' and 'NOT' conditions.
+3. **Verify Extraction**: Confirm candidate data can be scraped from the result list.
+
+Please start by reading `talent-search/docs/history/walkthrough_20240202_transfer.md` to understand the exact failure point."
