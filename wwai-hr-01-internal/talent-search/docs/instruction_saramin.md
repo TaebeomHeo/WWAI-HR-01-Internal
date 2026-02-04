@@ -4,6 +4,17 @@ This document serves as a standard operating procedure (SOP) for the AI Agent to
 
 > [!IMPORTANT]
 > **Operational Constraint**: All actions must be performed using the **Browser Tool** only. Do NOT create or use external scripts (Python/Selenium, etc).
+>
+> [!CRITICAL]
+> **Tab Management**: Always ensure you are interacting with the **ACTIVE** browser tab. Multiple tabs with the same URL may exist.
+> - Check metadata for `[ACTIVE]` indicator (e.g., `Page ... [ACTIVE]`).
+> - Interacting with background tabs will result in silent failures (actions technically succeed but user sees nothing).
+>
+> [!CRITICAL]
+> **Korean Input Protocol**: When inputting Korean characters (Hangul), standard keyboard simulation often fails due to IME issues.
+> - **MUST USE**: JavaScript Injection via `document.execCommand('insertText', false, 'keyword')` or `nativeInputValueSetter`.
+> - **DO NOT USE**: Simple `type` or `press_key` commands for Hangul.
+> - Always trigger `input`, `change`, and `Enter` events manually after injection.
 
 ## 1. Input Variables
 
