@@ -11,10 +11,13 @@ This document serves as a standard operating procedure (SOP) for the AI Agent to
 > - Interacting with background tabs will result in silent failures (actions technically succeed but user sees nothing).
 >
 > [!CRITICAL]
-> **Korean Input Protocol**: When inputting Korean characters (Hangul), standard keyboard simulation often fails due to IME issues.
-> - **MUST USE**: JavaScript Injection via `document.execCommand('insertText', false, 'keyword')` or `nativeInputValueSetter`.
-> - **DO NOT USE**: Simple `type` or `press_key` commands for Hangul.
-> - Always trigger `input`, `change`, and `Enter` events manually after injection.
+> [!CRITICAL]
+> **Korean Input Protocol (Robust)**: Standard JS value setting often fails to trigger tag creation.
+> - **Proven Method**:
+>   1. **Focus**: Click the input field to ensure focus.
+>   2. **Paste**: Use `document.execCommand('insertText', false, 'keyword')`. This mimics user pasting and is more reliable than direct value assignment.
+>   3. **Enter**: Press the physical 'Enter' key (or simulate it perfectly).
+> - **Verification**: Always check if a **Tag** (e.g., `<span class="tag">keyword</span>`) is created before clicking Search.
 
 ## 1. Input Variables
 
@@ -43,33 +46,31 @@ This document serves as a standard operating procedure (SOP) for the AI Agent to
 5.  **Navigate directly to Talent Search Page**:
     - URL: `https://www.saramin.co.kr/zf_user/memcom/talent-pool/main/search`
 
-### Step 2: Talent Search Protocol (Verified)
+### Step 2: Talent Search Protocol (Standardized)
 
-1.  **Reset Conditions**:
-    - Click "초기화" (Reset) button on the right side of the search bar.
-    - Wait for reset.
+1.  **Reset & Open Layer**:
+    - Click "초기화" (Reset) button.
+    - Click the search input area (placeholder: '직무, 스킬, 회사 등') to **Open the Search Layer**.
 
-2.  **Base Search (Keyword 'SQA')**:
-    - Click `.search_default input.search_input` to open the Search Layer.
-    - **Exact Match**: Verify `#keywordSearch` checkbox is CHECKED. If not, click it.
-    - **Input Keyword**: 'SQA' -> Press Enter.
+2.  **Configuration (Exact Match)**:
+    - Locate **'키워드 일치 검색' (Exact Match)** option.
+    - **Toggle ON**: Ensure the checkbox is checked. (Click label if unchecked).
 
-3.  **Refine Search (Hangul Input - '개발')**:
-    - **Reset Conditions** (Again, if starting fresh test).
-    - Open Search Layer.
-    - **Exact Match**: Ensure checked.
-    - **Input Hangul (JS Injection Required)**:
-      - Locate active input element.
-      - Use React-compatible setter to input '개발'.
-      - Trigger `input` and `change` events.
-    - **Search**: Press Enter.
-2.  **Refine Search (AND Conditions)**:
-    - **Locate AND Input**: `.search_word_include input.search_input` (Placeholder: 키워드를 모두 포함)
-    - **Input Keywords**:
-      - "금융" (Enter/Chip).
-      - "개발" (Enter/Chip).
-    - **Click SEARCH**: Trigger search again.
-3.  **Filters**: Apply filters (Experience 5yr+) after keywords.
+3.  **Input Keywords (Protocol)**:
+    - **Main (OR) Input**:
+        - Target: First input box (`.search_input`).
+        - Usage: Primary keywords (e.g., "금융") with **Exact Match**.
+        - Action: Focus -> `execCommand` -> Enter.
+    - **AND (Include) Input**:
+        - Target: Second input box (Placeholder: "키워드를 모두 포함").
+        - Usage: specific constraints (e.g., "보험").
+        - Action: Focus -> `execCommand` -> Enter.
+
+    > [!IMPORTANT]
+    > **Non-Destructive Refinement**: When adding AND/NOT conditions or filters to an active search, **DO NOT CLICK RESET (초기화)**. Just add the new condition and click Search. Use Reset only when starting a completely unrelated search topic.
+
+4.  **Final Execution**:
+    - **Search**: Click the main **Search Button** (`.btn_search`) to finalize.
 
 ### Step 3: Extraction
 
