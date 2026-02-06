@@ -1,16 +1,108 @@
 import os
 import time
 import csv
+import re
+import yaml
+import json
 from datetime import datetime
 from playwright.sync_api import sync_playwright
+from openpyxl import Workbook
+from openai import OpenAI
 
-# 상수 설정
+# ==================================================================================
+# 설정 (Environment Setup)
+# ==================================================================================
 LOGIN_URL = 'https://www.saramin.co.kr/zf_user/auth'
 SEARCH_URL = 'https://www.saramin.co.kr/zf_user/memcom/talent-pool/main/search'
-USER_ID = 'wisewires' 
+USER_ID = 'wisewires'
 USER_PW = 'insa5051'
 
+# Config 로드
+CONFIG_PATH = os.path.join("talent-search", "config", "filtering_criteria.yaml")
+with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+    config = yaml.safe_load(f)
+
+# 리스트 형태로 키워드 로드 (단일 문자열도 리스트로 변환)
+_exact = config.get("search_keywords", {}).get("exact_match", ["개발"])
+_integrated = config.get("search_keywords", {}).get("integrated", ["금융"])
+SEARCH_KEYWORDS_EXACT = _exact if isinstance(_exact, list) else [_exact]
+SEARCH_KEYWORDS_INTEGRATED = _integrated if isinstance(_integrated, list) else [_integrated]
+FILTERING_CRITERIA = config.get("criteria", [])
+LLM_MODEL = config.get("llm", {}).get("model", "gpt-4o")
+OPENAI_API_KEY = config.get("llm", {}).get("api_key", "")
+
+# OpenAI Client 설정
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# 결과 파일 설정
+DATE_STR = datetime.now().strftime("%Y-%m-%d")
+OUTPUT_DIR = os.path.join("talent-search", "candidate", "saramin")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# 파일명에 검색 조건 포함
+exact_str = "_".join(SEARCH_KEYWORDS_EXACT)
+integrated_str = "_".join(SEARCH_KEYWORDS_INTEGRATED)
+CSV_FILENAME = f"candidate_{DATE_STR}_or({exact_str})_and({integrated_str}).csv"
+CSV_PATH = os.path.join(OUTPUT_DIR, CSV_FILENAME)
+
+
+def check_candidate_with_llm(resume_text, criteria):
+    """
+    LLM을 사용하여 후보자 이력서(resume_text)가 기준(criteria)에 부합하는지 평가합니다.
+    """
+    print("  [AI 평가] OpenAI GPT 분석 중...")
+
+    # 텍스트 전처리 (토큰 제한 고려)
+    # 앞부분 3500자 + 뒷부분 1500자 (희망근무조건 등 중요 정보 보존)
+    if len(resume_text) > 5000:
+        short_text = resume_text[:3500] + "\n\n...[중략]...\n\n" + resume_text[-1500:]
+    else:
+        short_text = resume_text
+
+    criteria_str = "\n".join([f"- {c}" for c in criteria])
+
+    prompt = f"""
+    You are an expert HR Recruiter. Evaluate if the candidate's resume matches the following Job Requirements.
+
+    [Job Requirements]
+    {criteria_str}
+
+    [Candidate Resume]
+    {short_text}
+
+    [Task]
+    Analyze the resume and determine if the candidate passes the requirements.
+    Output JSON format only:
+    {{
+        "pass": true/false,
+        "reason": "Summarize the reason in Korean (max 1 sentence). Mention matched skills."
+    }}
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[
+                {"role": "system", "content": "You are a helpful HR assistant. Output JSON only."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1
+        )
+
+        result = json.loads(response.choices[0].message.content)
+        return result.get("pass", False), result.get("reason", "No reason provided")
+
+    except Exception as e:
+        print(f"  [AI Error] {e}")
+        return False, f"Error: {e}"
+
+
 def run():
+    print("Saramin Bot v2 (Smart Filtering) 시작...")
+    print(f"검색어: {SEARCH_KEYWORDS_EXACT} (OR/일치), {SEARCH_KEYWORDS_INTEGRATED} (AND/통합)")
+    print(f"필터링 기준: {FILTERING_CRITERIA}")
+
     # 사용자 데이터 디렉토리 설정 (로그인 세션 유지용)
     user_data_dir = os.path.join(os.getcwd(), 'playwright_user_data')
     os.makedirs(user_data_dir, exist_ok=True)
@@ -21,7 +113,7 @@ def run():
         context = p.chromium.launch_persistent_context(
             user_data_dir,
             headless=False,
-            viewport={'width': 1280, 'height': 1024} # 뷰포트 고정 추천
+            viewport={'width': 1280, 'height': 1024}
         )
         page = context.pages[0] if context.pages else context.new_page()
 
@@ -29,7 +121,7 @@ def run():
             # 2. 로그인 페이지 이동
             print(f"로그인 페이지로 이동 중: {LOGIN_URL}")
             page.goto(LOGIN_URL, timeout=60000)
-            
+
             # 이미 로그인 되어 있는지 확인 (Persistent Context 효과)
             if "login" not in page.url and "auth" not in page.url:
                  print("이미 로그인되어 있을 수 있습니다.")
@@ -38,137 +130,111 @@ def run():
                 if page.is_visible('.btn_tab.t_com'):
                     print("기업회원 탭 클릭...")
                     page.click('.btn_tab.t_com')
-    
+
                 # 4. 로그인 정보 입력 (로그인 페이지인 경우에만)
                 if page.is_visible("#id"):
                     print("아이디/비밀번호 입력 중...")
-                    page.fill("#id", USER_ID) 
+                    page.fill("#id", USER_ID)
                     page.fill("#password", USER_PW)
-        
+
                     # 5. 로그인 버튼 클릭
                     print("로그인 버튼 클릭...")
                     page.click('.btn_login')
-                    
+
                     # 페이지 이동 대기
                     page.wait_for_load_state('networkidle')
 
             # 6. 인재풀 검색 페이지 이동
             print(f"인재풀 검색 페이지로 이동 중: {SEARCH_URL}")
             page.goto(SEARCH_URL)
-            
-            print("페이지 로딩 대기 중... (2차 인증이 필요한 경우 브라우저에서 직접 완료해주세요. 완료될 때까지 계속 기다립니다.)")
+
+            print("페이지 로딩 대기 중... (2차 인증이 필요한 경우 브라우저에서 직접 완료해주세요.)")
             page.wait_for_selector('.talent_header', timeout=0)
 
             # 7. 검색 조건 초기화
             if page.is_visible('button.btn_reset'):
                 print("검색 조건 초기화...")
                 page.click('button.btn_reset')
-            
+                time.sleep(1)
+
             # 검색 패널 열기 (필요시)
             if not page.is_visible('div.search_default'):
                 page.click('#app > div.talent_header > div > div > div.btn_search_history_wrap > button')
 
-            # 8. OR 키워드 입력 ("개발")
-            print("OR 키워드 '개발' 입력 중...")
-            page.click('div.search_default input.search_input.result')
-            page.wait_for_selector('.search_detail input.search_input')
-            
-            page.evaluate("""
-                () => {
-                    const input = document.querySelector(".search_detail input.search_input");
-                    input.value = "개발";
-                    input.dispatchEvent(new Event("input", {bubbles:true}));
-                    
-                    const exactMatch = document.querySelector("#keywordSearch");
-                    if (exactMatch) {
-                        exactMatch.checked = true; // Exact Match ON
-                        exactMatch.dispatchEvent(new Event("change", {bubbles: true}));
-                    }
-                }
-            """)
-            
-            # 텍스트 입력창 클릭 후 Enter 입력
-            page.click('.search_detail input.search_input')
-            page.press('.search_detail input.search_input', 'Enter')
-            time.sleep(1) 
+            # ================================================================
+            # 8. OR 키워드 입력 (exact_match → OR 검색, 정확히 일치)
+            # ================================================================
+            for keyword in SEARCH_KEYWORDS_EXACT:
+                print(f"OR 키워드 '{keyword}' 입력 중 (정확히 일치)...")
+                page.click('div.search_default input.search_input.result')
+                page.wait_for_selector('.search_detail input.search_input')
 
-            # 9. AND 키워드 입력 ("금융")
-            print("AND 키워드 '금융' 입력 중...")
-            page.click('div.search_word_include input.search_input.result')
-            page.wait_for_selector('.search_detail input.search_input')
-            
-            page.evaluate("""
-                () => {
-                    const input = document.querySelector(".search_detail input.search_input");
-                    input.value = "금융";
-                    input.dispatchEvent(new Event("input", {bubbles:true}));
-                    
-                    const exactMatch = document.querySelector("#keywordSearch");
-                    if (exactMatch) {
-                        exactMatch.checked = false; // Exact Match OFF
-                        exactMatch.dispatchEvent(new Event("change", {bubbles: true}));
-                    }
-                }
-            """)
-            
-            # 텍스트 입력창 클릭 후 Enter 입력 (사용자 요청)
-            page.click('.search_detail input.search_input')
-            page.press('.search_detail input.search_input', 'Enter')
-            time.sleep(1)
+                page.evaluate(f"""
+                    () => {{
+                        const input = document.querySelector(".search_detail input.search_input");
+                        input.value = "{keyword}";
+                        input.dispatchEvent(new Event("input", {{bubbles:true}}));
 
-            # 9-2. 자동차 ("자동차")
-            print("AND 키워드 '자동차' 입력 중...")
-            page.click('div.search_word_include input.search_input.result') 
-            
-            page.evaluate("""
-                () => {
-                    const input = document.querySelector(".search_detail input.search_input");
-                    if (input) {
-                        input.value = "자동차";
-                        input.dispatchEvent(new Event("input", {bubbles:true}));
-                        
                         const exactMatch = document.querySelector("#keywordSearch");
-                        if (exactMatch) {
-                            exactMatch.checked = false; // Exact Match OFF
-                            exactMatch.dispatchEvent(new Event("change", {bubbles: true}));
-                        }
-                    }
-                }
-            """)
-            
-            # 텍스트 입력창 클릭 후 Enter 입력 (사용자 요청)
-            page.click('.search_detail input.search_input')
-            page.press('.search_detail input.search_input', 'Enter')
-            time.sleep(1)
+                        if (exactMatch) {{
+                            exactMatch.checked = true; // Exact Match ON
+                            exactMatch.dispatchEvent(new Event("change", {{bubbles: true}}));
+                        }}
+                    }}
+                """)
 
-            # 10. 검색 실행 (동적 업데이트되므로 버튼 클릭 불필요)
+                page.click('.search_detail input.search_input')
+                page.press('.search_detail input.search_input', 'Enter')
+                time.sleep(1)
+
+            # ================================================================
+            # 9. AND 키워드 입력 (integrated → AND 검색, 포함)
+            # ================================================================
+            for keyword in SEARCH_KEYWORDS_INTEGRATED:
+                print(f"AND 키워드 '{keyword}' 입력 중 (포함)...")
+                page.click('div.search_word_include input.search_input.result')
+                page.wait_for_selector('.search_detail input.search_input')
+
+                page.evaluate(f"""
+                    () => {{
+                        const input = document.querySelector(".search_detail input.search_input");
+                        if (input) {{
+                            input.value = "{keyword}";
+                            input.dispatchEvent(new Event("input", {{bubbles:true}}));
+
+                            const exactMatch = document.querySelector("#keywordSearch");
+                            if (exactMatch) {{
+                                exactMatch.checked = false; // Exact Match OFF
+                                exactMatch.dispatchEvent(new Event("change", {{bubbles: true}}));
+                            }}
+                        }}
+                    }}
+                """)
+
+                page.click('.search_detail input.search_input')
+                page.press('.search_detail input.search_input', 'Enter')
+                time.sleep(1)
+
+            # 10. 검색 결과 대기
             print("검색 결과 업데이트 대기 중...")
-            # page.click('#search_btn', force=True) # 삭제
-            
-            # 결과 로딩 대기 (동적 로딩 시간을 고려하여 대기)
-            # 확실한 업데이트를 위해 충분한 대기 시간 부여
-            time.sleep(5) 
-            # page.wait_for_load_state('networkidle') # 필요시 활성화
+            time.sleep(5)
             page.wait_for_selector('.talent_list_item', timeout=10000)
-            time.sleep(2) 
+            time.sleep(2)
 
-            # 11. 결과 추출
+            # 11. 결과 추출 (기본 정보)
             print("결과 추출 중...")
-            
-            # 리스트에서 기본 정보 추출
+
             basic_candidates = page.evaluate("""
                 () => {
                     const listItems = Array.from(document.querySelectorAll('.talent_list_item'));
-                    
-                    return listItems.slice(0, 10).map(item => {
+
+                    return listItems.slice(0, 30).map(item => {
                         const personInfo = item.querySelector('.personal_info');
                         const name = personInfo?.querySelector('.name')?.innerText.trim() || "";
                         const genderAge = personInfo?.querySelector('.gender_age')?.innerText.trim() || "";
                         const careerAll = personInfo?.querySelector('.career_all')?.innerText.trim() || "";
                         const residx = item.querySelector('.check_area')?.getAttribute('residx') || "";
-                        
-                        // 기존 Job Title, Career 정보 등도 일단 가져오되, 요구사항에 맞춰 정리
-                        // 여기서는 리스트상의 요약정보를 저장
+
                         return {
                             name: name,
                             gender_age: genderAge,
@@ -178,102 +244,165 @@ def run():
                     });
                 }
             """)
-            
-            print(f"1차 추출 및 상세 페이지 방문 (총 {len(basic_candidates)}명)...")
-            
-            final_candidates = []
-            
-            # 상세 페이지 방문하여 주소 추출
-            for cand in basic_candidates:
+
+            print(f"1차 추출 완료 (총 {len(basic_candidates)}명). 상세 분석 시작...")
+
+            all_candidates = []
+
+            # ================================================================
+            # 12. 상세 정보 추출 + AI 필터링
+            # ================================================================
+            for idx, cand in enumerate(basic_candidates):
                 if not cand['residx']:
                     continue
-                    
-                # React Detail URL
+
                 detail_url = f"https://hiring.saramin.co.kr/applicant-view/position/resume/{cand['residx']}"
-                print(f"상세 페이지 이동 중: {cand['name']} ({detail_url})")
-                
+                api_url = f"https://api-hiring.saramin.co.kr/api/positions/resume/{cand['residx']}/files?"
+                print(f"[{idx+1}/{len(basic_candidates)}] [{cand['name']}] API 호출 중...")
+
                 try:
-                    # 상세 페이지로 이동
-                    page.goto(detail_url)
-                    page.wait_for_load_state('domcontentloaded')
-                    time.sleep(2) 
+                    # API를 통해 이력서 HTML 가져오기
+                    resume_data = page.evaluate(f"""
+                        async () => {{
+                            try {{
+                                const response = await fetch('{api_url}', {{
+                                    credentials: 'include'
+                                }});
+                                const data = await response.json();
 
-                    # 주소 추출 (DOM Text Analysis)
-                    # 사용자 피드백: "인쇄 미리보기 화면이 나타날떄까지 3-5초 기다린 후, div를 dump해서 보면 되지 않을까?"
-                    print("페이지 렌더링 대기 (5초)...")
-                    time.sleep(5)
-                    
-                    # 1. Body Text 전체 스캔
-                    body_text = page.inner_text("body")
-                    
+                                if (data.success && data.result && data.result.resumeHtml) {{
+                                    const parser = new DOMParser();
+                                    const doc = parser.parseFromString(data.result.resumeHtml, 'text/html');
+                                    return {{
+                                        success: true,
+                                        text: doc.body.innerText,
+                                        htmlLength: data.result.resumeHtml.length
+                                    }};
+                                }}
+                                return {{ success: false, error: 'No resumeHtml in response' }};
+                            }} catch(e) {{
+                                return {{ success: false, error: e.message }};
+                            }}
+                        }}
+                    """)
+
                     address = ""
-                    # "주소", "거주지" 키워드 주변 텍스트 탐색
-                    # 예: "주소 : 서울특별시 ..." 또는 "거주지 : 경기도 ..."
-                    # 정규식으로 패턴 매칭 시도
-                    import re
-                    
-                    # 패턴 1: '주소' 또는 '거주지' 뒤에 나오는 텍스트
-                    # (줄바꿈이 있을 수 있으므로 주의)
-                    match = re.search(r"(주소|거주지)\s*[:]?\s*([^\n]+)", body_text)
-                    if match:
-                        found_addr = match.group(2).strip()
-                        # 너무 긴 문장은 오탐일 수 있으므로 길이 체크
-                        if len(found_addr) < 50:
-                            address = found_addr
-                            print(f"DOM 텍스트에서 주소 발견: {address}")
-                    
-                    # 패턴 2: 만약 키워드가 없다면, body text에서 '시'/'도'/'구'/'군'이 포함된 짧은 라인을 찾을 수도 있음
-                    # (오탐 가능성이 높으므로 일단 보류하고, 키워드가 없다면 전체 덤프에서 확인)
-                    
-                    if not address:
-                        print("주소/거주지 키워드를 Text에서 찾을 수 없습니다.")
-                        # 첫 번째 후보자에 대해서만 HTML 덤프 저장
-                        if cand == basic_candidates[0]:
-                             debug_html_path = "debug_saramin_resume.html"
-                             with open(debug_html_path, "w", encoding="utf-8") as f:
-                                 f.write(page.content())
-                             print(f"[DEBUG] HTML 덤프 저장 완료: {debug_html_path}")
-                        
-                        cand['address'] = ""
+                    resume_text = ""
 
-                    cand['revisit_url'] = detail_url
-                    final_candidates.append(cand)
-                    
-                    # 결과 확인을 위해 잠시 대기
-                    # time.sleep(1)
-                    
+                    if resume_data.get('success'):
+                        resume_text = resume_data.get('text', '')
+                        print(f"  이력서 텍스트: {len(resume_text)}자")
+
+                        # 주소 추출
+                        addr_match = re.search(r'(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)\s*[가-힣]+(구|시|군)', resume_text)
+                        if addr_match:
+                            address = addr_match.group(0).strip()
+
+                        # AI 필터링
+                        if FILTERING_CRITERIA:
+                            passed, reason = check_candidate_with_llm(resume_text, FILTERING_CRITERIA)
+                            cand['Result'] = 'PASS' if passed else 'FAIL'
+                            cand['Reason'] = reason
+                            if passed:
+                                print(f"  -> PASS ({reason})")
+                            else:
+                                print(f"  -> FAIL ({reason})")
+                        else:
+                            cand['Result'] = 'N/A'
+                            cand['Reason'] = 'No filtering criteria'
+                            print(f"  -> 필터링 기준 없음")
+
+                    else:
+                        print(f"  API 오류: {resume_data.get('error', 'Unknown')}")
+                        cand['Result'] = 'ERROR'
+                        cand['Reason'] = resume_data.get('error', 'API Error')
+
+                    cand['Address'] = address
+                    cand['Link'] = detail_url
+                    all_candidates.append(cand)
+
+                    time.sleep(0.5)
+
                 except Exception as e:
-                    print(f"상세 페이지 처리 중 오류: {e}")
-                    cand['address'] = "Error"
-                    cand['revisit_url'] = detail_url
-                    final_candidates.append(cand)
+                    print(f"  오류: {e}")
+                    cand['Address'] = ""
+                    cand['Link'] = detail_url
+                    cand['Result'] = 'ERROR'
+                    cand['Reason'] = str(e)
+                    all_candidates.append(cand)
 
-            # 12. CSV 저장
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            output_dir = 'talent-search/candidate/saramin'
-            os.makedirs(output_dir, exist_ok=True)
-            output_file = os.path.join(output_dir, f'candidate_list_{today_str}_saramin.csv')
-            
-            print(f"CSV 저장 중: {output_file}")
-            with open(output_file, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                # 헤더 변경: Name, Gender_Age, Total_Career, Address, Revisit_URL
-                writer.writerow(['Name', 'Gender_Age', 'Total_Career', 'Address', 'Revisit_URL'])
-                
-                for c in final_candidates:
-                    writer.writerow([c['name'], c['gender_age'], c['career_all'], c.get('address', ''), c['revisit_url']])
-            
-            print("완료!")
+            # ================================================================
+            # 13. 결과 정렬 (PASS를 앞에)
+            # ================================================================
+            passed_candidates = [c for c in all_candidates if c.get('Result') == 'PASS']
+            failed_candidates = [c for c in all_candidates if c.get('Result') != 'PASS']
+            sorted_candidates = passed_candidates + failed_candidates
+
+            print(f"\n결과: PASS {len(passed_candidates)}명 / FAIL {len(failed_candidates)}명")
+
+            # ================================================================
+            # 14. CSV 및 Excel 저장
+            # ================================================================
+            if sorted_candidates:
+                # CSV 저장
+                headers = ['Result', 'Name', 'Gender_Age', 'Career', 'Address', 'Link', 'Reason']
+                with open(CSV_PATH, 'w', newline='', encoding='utf-8-sig') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(headers)
+                    for c in sorted_candidates:
+                        writer.writerow([
+                            c.get('Result', ''),
+                            c.get('name', ''),
+                            c.get('gender_age', ''),
+                            c.get('career_all', ''),
+                            c.get('Address', ''),
+                            c.get('Link', ''),
+                            c.get('Reason', '')
+                        ])
+                print(f"\nCSV 저장 완료: {CSV_PATH}")
+
+                # Excel 저장
+                EXCEL_PATH = CSV_PATH.replace('.csv', '.xlsx')
+                wb = Workbook()
+                ws = wb.active
+                ws.title = "후보자 목록"
+
+                ws.append(headers)
+                for c in sorted_candidates:
+                    ws.append([
+                        c.get('Result', ''),
+                        c.get('name', ''),
+                        c.get('gender_age', ''),
+                        c.get('career_all', ''),
+                        c.get('Address', ''),
+                        c.get('Link', ''),
+                        c.get('Reason', '')
+                    ])
+
+                # 컬럼 너비 설정
+                col_widths = {'A': 8, 'B': 10, 'C': 12, 'D': 15, 'E': 15, 'F': 60, 'G': 80}
+                for col, width in col_widths.items():
+                    ws.column_dimensions[col].width = width
+
+                wb.save(EXCEL_PATH)
+                print(f"Excel 저장 완료: {EXCEL_PATH}")
+            else:
+                print("\n후보자가 없습니다.")
+
+            print("\n완료!")
 
         except Exception as e:
             print(f"오류 발생: {e}")
             import traceback
             traceback.print_exc()
-        
+
         finally:
             print("작업 완료. 브라우저는 열린 상태로 유지됩니다.")
-            # context.close()  # 브라우저 유지
-            input("브라우저를 종료하려면 Enter를 누르세요...") # 스크립트 종료 방지
+            print("브라우저를 종료하려면 Enter를 누르세요...")
+            try:
+                input()
+            except EOFError:
+                pass
 
 if __name__ == "__main__":
     run()
