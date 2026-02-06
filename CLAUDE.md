@@ -33,13 +33,67 @@ HR team members with:
 │   └── 04-Real-Cases/      # Real-world examples from HR workflows
 ├── Requirements/            # Original business requirements (in Korean)
 ├── DB/                      # Database related resources
-│   ├── src/                # Utility Python scripts
+│   ├── src/                # Utility Python scripts (schema export, validation)
 │   ├── schema/             # Database schema documentation
 │   └── SQL-Templates/      # Reusable SQL query templates
 │       ├── 인사/            # Personnel queries
 │       ├── 급여/            # Payroll queries
 │       └── 총무/            # General affairs
+├── talent-search/           # Recruitment automation bots
+│   ├── src/                # Playwright-based web scrapers
+│   │   ├── saramin_bot.py  # Saramin 인재풀 scraper
+│   │   └── jobkorea_bot.py # JobKorea scraper with AI filtering
+│   ├── config/             # filtering_criteria.yaml for AI screening
+│   ├── candidate/          # Output CSV files by platform
+│   └── docs/               # Bot instructions and requirements
+├── job_korea_search/        # Legacy JobKorea crawler (deprecated)
+├── .claude/agents/          # Custom Claude Code agents
+│   └── hr-db-query-assistant.md  # Natural language DB query agent
 └── Exercises/               # Practice problems
+```
+
+## Common Commands
+
+### Talent Search Bots (Recruitment Automation)
+
+```bash
+# Run Saramin talent search (requires playwright)
+pip install playwright pymysql pyyaml openai
+playwright install chromium
+python talent-search/src/saramin_bot.py
+
+# Run JobKorea talent search with AI filtering
+# Requires OPENAI_API_KEY environment variable
+export OPENAI_API_KEY="your-key"
+python talent-search/src/jobkorea_bot.py
+```
+
+Bot outputs are saved to `talent-search/candidate/{platform}/candidate_list_{date}.csv`
+
+### Database Utilities
+
+```bash
+# Test database connection
+python DB/src/db_test_connection.py
+
+# Export database schema to markdown
+python DB/src/db_schema_exporter.py
+
+# Validate PL data consistency between tables
+python DB/src/pl_crosscheck_by_empnum.py
+```
+
+### HR Database Queries (via Python)
+
+Use `pymysql` for database connections (CLI mysql/mariadb fails due to SSL issues):
+
+```python
+import pymysql
+conn = pymysql.connect(
+    host='61.37.80.105', port=3306,
+    user='wisewires', password='wiseadmin140!',
+    database='dbwisewiresdb', charset='utf8mb4'
+)
 ```
 
 ## SQL Templates 사용법
@@ -130,12 +184,32 @@ Requirements from actual HR workflows are documented in Korean in `Requirements/
 - **Format**: Markdown with code examples and practice problems
 - **Approach**: Learn by doing with realistic examples
 
-## Future Phases
+## Architecture Notes
 
-After mastering SQL and AI collaboration:
-- Phase 2: Subagent development for automation
-- Phase 3: Automated reporting workflows
-- Phase 4: Predictive analytics integration
+### Database Schema (MariaDB)
+Key Views for HR queries (use these instead of base tables):
+- **hrtransferhistory2**: Personnel assignments, transfers, project allocations (the "Fact Table")
+- **basicinfoview**: Current employee info with active project
+- **projectinfoview**: Project details and status
+
+Common pattern for "currently active" records:
+```sql
+WHERE end_date IS NULL OR end_date = ''
+```
+
+### Talent Search Bots
+Both bots use Playwright with persistent browser context for session management:
+- **saramin_bot.py**: Scrapes Saramin 인재풀, extracts candidate info from list + detail pages
+- **jobkorea_bot.py**: Scrapes JobKorea, uses OpenAI GPT-4o to filter candidates against criteria in `filtering_criteria.yaml`
+
+Configure search/filtering criteria in `talent-search/config/filtering_criteria.yaml`.
+
+### Custom Agent: hr-db-query-assistant
+Located at `.claude/agents/hr-db-query-assistant.md`. Handles natural language Korean queries like "지난 주 발령 내역 좀 뽑아줘" by:
+1. Understanding the request
+2. Generating appropriate SQL
+3. Executing via Python/pymysql
+4. Formatting results as CSV
 
 ## When Adding New Content
 

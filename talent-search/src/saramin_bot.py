@@ -198,96 +198,49 @@ def run():
                     page.wait_for_load_state('domcontentloaded')
                     time.sleep(2) 
 
-                    # 주소 추출 (Network Interception & JSON Parsing)
+                    # 주소 추출 (DOM Text Analysis)
+                    # 사용자 피드백: "인쇄 미리보기 화면이 나타날떄까지 3-5초 기다린 후, div를 dump해서 보면 되지 않을까?"
+                    print("페이지 렌더링 대기 (5초)...")
+                    time.sleep(5)
+                    
+                    # 1. Body Text 전체 스캔
+                    body_text = page.inner_text("body")
+                    
                     address = ""
-                    matched_response_data = {}
-
-                    # 페이지 이동 전/후에 발생하는 네트워크 응답을 포착하기 위해 로직 수정 필요하지만,
-                    # 여기서는 간단히 page의 request/response 이벤트를 활용하기 어렵고(이미 로드됨),
-                    # 리로드하거나, 앞단에서 리스너를 등록해야 함.
-                    # 구조상 loop 안에서 매번 리스너를 등록/해제하는 것이 안전함.
-
-                    def handle_response(response):
-                        nonlocal address
-                        try:
-                            # Content-Type 느슨한 체크
-                            ctype = response.headers.get("content-type", "").lower()
-                            if "json" in ctype:
-                                # URL 필터링 (이력서 정보 관련)
-                                # data.json? ... 형태일 수도 있음
-                                
-                                try:
-                                    data = response.json()
-                                except:
-                                    return
-
-                                import json
-                                json_str = json.dumps(data, ensure_ascii=False)
-                                
-                                # 디버깅: JSON 키 로깅 (첫 번째 사람만)
-                                if cand == basic_candidates[0] and len(json_str) > 100:
-                                    print(f"[DEBUG] JSON Response from {response.url} (Type: {ctype})")
-                                    # 너무 기니까 일부만 출력하거나 키만 출력
-                                    if isinstance(data, dict):
-                                        print(f"Keys: {list(data.keys())}")
-                                        if "result" in data:
-                                            print(f"Result Keys: {list(data['result'].keys())}")
-                                
-                                # 키워드 검색
-                                if "address" in json_str or "region" in json_str or "addr" in json_str:
-                                    # 실제 구조 파싱 시도 (예상: data.result.address)
-                                    # 만약 'result' 안에 있다면
-                                    target_dict = data
-                                    if "result" in data and isinstance(data["result"], dict):
-                                        target_dict = data["result"]
-                                    
-                                    # 가능한 키들 확인
-                                    for key in ["address", "addr", "region", "area", "loc"]:
-                                        val = target_dict.get(key)
-                                        if val and isinstance(val, str) and "제안 수락" not in val:
-                                            address = val
-                                            print(f"Network에서 주소 발견 ({key}): {address}")
-                                            break
-                        except Exception as e:
-                            # print(f"Network handler error: {e}")
-                            pass
-
-                    # 리스너 등록
-                    page.on("response", handle_response)
+                    # "주소", "거주지" 키워드 주변 텍스트 탐색
+                    # 예: "주소 : 서울특별시 ..." 또는 "거주지 : 경기도 ..."
+                    # 정규식으로 패턴 매칭 시도
+                    import re
                     
-                    # 이미 페이지가 로드된 상태라면 리로드가 필요할 수 있음.
-                    # 또는 앞서 goto 하기 전에 등록했어야 함.
-                    # 현재 구조에서는 goto 직전에 등록하는 것이 좋으므로,
-                    # 이 블록을 goto 위로 옮기거나, 페이지를 리로드함.
-                    page.reload() 
-                    page.wait_for_load_state('domcontentloaded')
-                    time.sleep(2)
+                    # 패턴 1: '주소' 또는 '거주지' 뒤에 나오는 텍스트
+                    # (줄바꿈이 있을 수 있으므로 주의)
+                    match = re.search(r"(주소|거주지)\s*[:]?\s*([^\n]+)", body_text)
+                    if match:
+                        found_addr = match.group(2).strip()
+                        # 너무 긴 문장은 오탐일 수 있으므로 길이 체크
+                        if len(found_addr) < 50:
+                            address = found_addr
+                            print(f"DOM 텍스트에서 주소 발견: {address}")
                     
-                    # 리스너 해제
-                    page.remove_listener("response", handle_response)
-
-                    # Shadow DOM Host 확인 (User provided selector) -> 혹시 텍스트가 있을지 확인
-                    try:
-                        host_selector = "body > div.EmptyLayout_empty-layout__wDWQf > div > div > main > div.layout_main__content__KStXP > div > div.ave9acc8e > div.av7f6f73a.ApplicantViewContent_gray__urLj5.ApplicantViewContent_center__fzGwA > div.av372e2e1.avf7a1d95 > div"
-                        # 만약 Host Element의 textContent에 주소가 포함되어 있다면?
-                        if not address and page.is_visible(host_selector):
-                            host_text = page.inner_text(host_selector)
-                            if "서울" in host_text or "경기" in host_text:
-                                print("Shadow Host 내부 텍스트에서 지역명 발견")
-                                # 간단한 추출 로직 (정규식 등) 필요하나 일단 전체 저장
-                                # address = host_text 
-                                pass
-                    except:
-                        pass
+                    # 패턴 2: 만약 키워드가 없다면, body text에서 '시'/'도'/'구'/'군'이 포함된 짧은 라인을 찾을 수도 있음
+                    # (오탐 가능성이 높으므로 일단 보류하고, 키워드가 없다면 전체 덤프에서 확인)
                     
                     if not address:
-                         print("Network 및 Host Text에서도 주소 확인 실패")
+                        print("주소/거주지 키워드를 Text에서 찾을 수 없습니다.")
+                        # 첫 번째 후보자에 대해서만 HTML 덤프 저장
+                        if cand == basic_candidates[0]:
+                             debug_html_path = "debug_saramin_resume.html"
+                             with open(debug_html_path, "w", encoding="utf-8") as f:
+                                 f.write(page.content())
+                             print(f"[DEBUG] HTML 덤프 저장 완료: {debug_html_path}")
+                        
+                        cand['address'] = ""
 
-                    cand['address'] = address
                     cand['revisit_url'] = detail_url
                     final_candidates.append(cand)
                     
-                    time.sleep(1)
+                    # 결과 확인을 위해 잠시 대기
+                    # time.sleep(1)
                     
                 except Exception as e:
                     print(f"상세 페이지 처리 중 오류: {e}")
