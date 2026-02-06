@@ -21,8 +21,11 @@ CONFIG_PATH = os.path.join("talent-search", "config", "filtering_criteria.yaml")
 with open(CONFIG_PATH, "r", encoding="utf-8") as f:
     config = yaml.safe_load(f)
 
-SEARCH_KEYWORD_EXACT = config.get("search_keywords", {}).get("exact_match", "SQA")
-SEARCH_KEYWORD_MAIN = config.get("search_keywords", {}).get("integrated", "AI활용")
+# 리스트 형태로 키워드 로드 (단일 문자열도 리스트로 변환)
+_exact = config.get("search_keywords", {}).get("exact_match", ["SQA"])
+_integrated = config.get("search_keywords", {}).get("integrated", ["AI활용"])
+SEARCH_KEYWORDS_EXACT = _exact if isinstance(_exact, list) else [_exact]
+SEARCH_KEYWORDS_INTEGRATED = _integrated if isinstance(_integrated, list) else [_integrated]
 FILTERING_CRITERIA = config.get("criteria", [])
 LLM_MODEL = config.get("llm", {}).get("model", "gpt-4o")
 OPENAI_API_KEY = config.get("llm", {}).get("api_key", "")
@@ -34,7 +37,11 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 DATE_STR = datetime.now().strftime("%Y-%m-%d")
 OUTPUT_DIR = os.path.join("talent-search", "candidate", "jobkorea")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-CSV_FILENAME = f"candidate_list_filtered_{DATE_STR}_jobkorea.csv"
+
+# 파일명에 검색 조건 포함 (일치_통합 형태)
+exact_str = "_".join(SEARCH_KEYWORDS_EXACT)
+integrated_str = "_".join(SEARCH_KEYWORDS_INTEGRATED)
+CSV_FILENAME = f"candidate_{DATE_STR}_exact({exact_str})_integ({integrated_str}).csv"
 CSV_PATH = os.path.join(OUTPUT_DIR, CSV_FILENAME)
 
 def check_candidate_with_llm(resume_text, criteria):
@@ -120,16 +127,16 @@ def select_search_type_and_input(page, search_type, keyword):
     """)
     time.sleep(0.5)
 
-    # 2. 키워드 입력 (JavaScript로 value 설정 + input 이벤트 발생)
-    page.evaluate(f"""
-        (() => {{
+    # 2. 키워드 입력 (argument로 전달하여 특수문자 안전 처리)
+    page.evaluate("""
+        (kw) => {
             const input = document.querySelector('#txtKeyword');
-            if (input) {{
-                input.value = '{keyword}';
-                input.dispatchEvent(new Event('input', {{bubbles: true}}));
-            }}
-        }})()
-    """)
+            if (input) {
+                input.value = kw;
+                input.dispatchEvent(new Event('input', {bubbles: true}));
+            }
+        }
+    """, keyword)
     time.sleep(0.3)
 
     # 3. 검색 버튼 클릭
@@ -144,7 +151,7 @@ def select_search_type_and_input(page, search_type, keyword):
 
 def run():
     print("JobKorea Bot v2 (Smart Filtering) 시작...")
-    print(f"검색어: {SEARCH_KEYWORD_EXACT} (일치), {SEARCH_KEYWORD_MAIN} (통합)")
+    print(f"검색어: {SEARCH_KEYWORDS_EXACT} (일치), {SEARCH_KEYWORDS_INTEGRATED} (통합)")
 
     with sync_playwright() as p:
         # 사용자 데이터 디렉토리 설정 (세션 유지)
@@ -196,11 +203,12 @@ def run():
             # ================================================================
             print("검색 조건 설정 중...")
 
-            # 3-0. 기존 검색 조건 초기화 (버튼이 있을 경우에만)
+            # 3-0. 기존 검색 조건 초기화
+            print("  [초기화] 기존 검색 조건 초기화 시도...")
             reset_clicked = page.evaluate("""
                 (() => {
                     const resetBtn = document.querySelector('#dvbtnReset');
-                    if (resetBtn && resetBtn.offsetParent !== null) {
+                    if (resetBtn) {
                         resetBtn.click();
                         return true;
                     }
@@ -208,16 +216,20 @@ def run():
                 })()
             """)
             if reset_clicked:
-                print("  [초기화] 기존 검색 조건 초기화 완료")
-                time.sleep(1)
-
-            # 3-1. 일치검색으로 첫 번째 키워드 검색
-            select_search_type_and_input(page, "exact", SEARCH_KEYWORD_EXACT)
+                print("  [초기화] 완료")
+            else:
+                print("  [초기화] 버튼 없음 - 스킵")
             time.sleep(1)
 
-            # 3-2. 통합검색으로 두 번째 키워드 추가
-            select_search_type_and_input(page, "integrated", SEARCH_KEYWORD_MAIN)
-            time.sleep(2)
+            # 3-1. 일치검색 키워드들 입력
+            for keyword in SEARCH_KEYWORDS_EXACT:
+                select_search_type_and_input(page, "exact", keyword)
+                time.sleep(1)
+
+            # 3-2. 통합검색 키워드들 입력
+            for keyword in SEARCH_KEYWORDS_INTEGRATED:
+                select_search_type_and_input(page, "integrated", keyword)
+                time.sleep(1)
 
             # 검색 조건 확인 (디버깅용)
             conditions = page.evaluate("""
