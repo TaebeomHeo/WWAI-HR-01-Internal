@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git remote add:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nInitial repository setup with project requirements and documentation\n\nAdd project requirements in Korean for HR system with three domains:\n- Personnel management (인사)\n- Payroll (급여)\n- General affairs (총무)\n\nInclude CLAUDE.md for future AI assistance and .gitignore for development files.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd comprehensive learning materials for HR team automation\n\nCreate structured training program with guides, examples, and documentation:\n\n## New Content Structure:\n- Onboarding/ - Project introduction and learning roadmap\n- Guides/01-Setup/ - DBeaver installation and DB connection\n- Guides/02-SQL-Basics/ - SQL fundamentals (SELECT, WHERE, JOIN, aggregations)\n- Guides/03-AI-Usage/ - AI collaboration techniques and prompting\n- Guides/04-Real-Cases/ - Real-world HR scenarios (personnel, payroll, assets)\n\n## Features:\n- Step-by-step tutorials for SQL beginners\n- AI prompting examples for effective collaboration\n- Practice problems with solutions\n- Real business case studies from HR workflows\n- All content in Korean for target audience\n\n## Updated:\n- CLAUDE.md - Reflects project''s educational nature and structure\n\nThis establishes the foundation for HR staff to learn SQL and AI tools\nfor automating personnel, payroll, and general affairs workflows.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(mkdir:*)",
+      "Bash(git commit:*)",
+      "Bash(python3:*)",
+      "Bash(pip3 install:*)",
+      "mcp__ide__executeCode",
+      "Bash(python:*)",
+      "Bash(pip install:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

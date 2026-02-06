@@ -26,9 +26,6 @@ vendor/
 .env.local
 .env.*.local
 
-# API Keys / Secrets
-talent-search/config/filtering_criteria.yaml
-
 # Build outputs
 dist/
 build/
