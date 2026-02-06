@@ -3,6 +3,8 @@ import time
 import csv
 import os
 from datetime import datetime
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 
 # ==================================================================================
 # 설정 (Environment Setup)
@@ -333,13 +335,43 @@ def run():
 
             print(f"\n결과: PASS {len(passed_candidates)}명 / FAIL {len(failed_candidates)}명")
 
-            # 5. CSV 저장
+            # 5. CSV 및 Excel 저장
             if sorted_candidates:
+                # CSV 저장
                 with open(CSV_PATH, 'w', newline='', encoding='utf-8-sig') as f:
                     writer = csv.DictWriter(f, fieldnames=['Result', 'Name', 'Title', 'Experience', 'Link', 'Reason'])
                     writer.writeheader()
                     writer.writerows(sorted_candidates)
                 print(f"\nCSV 저장 완료: {CSV_PATH}")
+
+                # Excel 저장
+                EXCEL_PATH = CSV_PATH.replace('.csv', '.xlsx')
+                wb = Workbook()
+                ws = wb.active
+                ws.title = "후보자 목록"
+
+                # 헤더
+                headers = ['Result', 'Name', 'Title', 'Experience', 'Link', 'Reason']
+                ws.append(headers)
+
+                # 데이터
+                for cand in sorted_candidates:
+                    ws.append([cand.get(h, '') for h in headers])
+
+                # 컬럼 너비 설정
+                col_widths = {
+                    'A': 8,   # Result
+                    'B': 10,  # Name
+                    'C': 35,  # Title
+                    'D': 12,  # Experience
+                    'E': 60,  # Link
+                    'F': 80,  # Reason
+                }
+                for col, width in col_widths.items():
+                    ws.column_dimensions[col].width = width
+
+                wb.save(EXCEL_PATH)
+                print(f"Excel 저장 완료: {EXCEL_PATH}")
             else:
                 print("\n후보자가 없습니다.")
 
@@ -348,7 +380,9 @@ def run():
             import traceback
             traceback.print_exc()
         finally:
-            print("작업 완료. 브라우저 대기 중...")
+            print("작업 완료. 브라우저 유지 중...")
+            print("브라우저를 종료하려면 Enter를 누르세요.")
+            input()
             # context.close()
 
 
