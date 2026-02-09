@@ -200,12 +200,13 @@ def run():
                         const input = document.querySelector(".search_detail input.search_input");
                         if (input) {{
                             input.value = "{keyword}";
+
                             input.dispatchEvent(new Event("input", {{bubbles:true}}));
 
+                            // 통합 검색에서는 Exact Match를 무조건 해제
                             const exactMatch = document.querySelector("#keywordSearch");
-                            if (exactMatch) {{
-                                exactMatch.checked = false; // Exact Match OFF
-                                exactMatch.dispatchEvent(new Event("change", {{bubbles: true}}));
+                            if (exactMatch && exactMatch.checked) {{
+                                exactMatch.click(); 
                             }}
                         }}
                     }}
