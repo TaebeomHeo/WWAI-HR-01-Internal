@@ -1,15 +1,24 @@
 # Filtering Criteria for Talent Search
 search_keywords:
-  exact_match: 'SQA'
-  integrated: 'AI활용'
+  #  exact_match: 'SQA'
+  #  integrated: 'AI활용'
+  exact_match:
+    - '개발'
+  integrated:
+    - '자동차'
+    - '네비게이션'
 
 criteria:
-  - 'SQA(Software Quality Assurance) 경력 3년 이상'
-  - 'Python 또는 Java 활용 능력 보유'
-  - '테스트 자동화(Automation) 경험 우대'
-  - '금융 또는 커머스 도메인 경험 우대'
+  # - 'SQA(Software Quality Assurance) 경력 3년 이상'
+  #  - 'Python 또는 Java 활용 능력 보유'
+  #  - '테스트 자동화(Automation) 경험 우대'
+  #  - '금융 또는 커머스 도메인 경험 우대'
+  - 'QA경력 5년이상'
+  - '희망근무지 서울지역'
+  - '학력 대졸 이상'
 
 llm:
-  model: 'gpt-4o'
-  max_tokens: 500
+  model: 'gpt-4o-mini'
+  max_tokens: 5000
   temperature: 0.1
+  api_key: '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'
